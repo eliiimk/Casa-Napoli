@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Casa Napoli – Admin</title>
+<style>
+:root{--bg:#0b190e;--card:#14281a;--fg:#efe8d8;--mute:#a7b49f;--line:#2b4332;--ember:#f08a24;--ok:#7fd18b;--bad:#ff8a7a}
+@media (prefers-color-scheme:light){:root{--bg:#f2ecdc;--card:#fff9ea;--fg:#10230f;--mute:#55604f;--line:#c8bfa6;--ember:#b8501a;--ok:#1d6b2e;--bad:#b8321f}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.4 system-ui,-apple-system,Segoe UI,sans-serif;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+.w{max-width:760px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:0}
+input,button{font:inherit;color:var(--fg);background:var(--card);border:1.5px solid var(--line);border-radius:8px;padding:10px 14px;min-height:44px}
+button{cursor:pointer}button.p{background:var(--ember);color:#1a0d02;border-color:var(--ember);font-weight:600}
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.tabs{display:flex;gap:8px;margin:14px 0;overflow-x:auto}
+.tabs button[aria-pressed=true]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.c{background:var(--card);border:1.5px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+.c.new{border-color:var(--ember)}
+.h{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:19px}
+.c a{color:var(--ember);font-weight:600}
+pre{white-space:pre-wrap;font:inherit;margin:8px 0;color:var(--mute)}
+.b{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.m{color:var(--mute);font-size:15px}.err{color:var(--bad)}
+.t{font-weight:600;color:var(--ok)}
+</style></head><body><div class="w">
+<div id="login" hidden><h1>Casa Napoli – Admin</h1><p class="m">Entrez le mot de passe.</p>
+<input id="pw" type="password" autocomplete="current-password" placeholder="Mot de passe"> <button class="p" id="go">Entrer</button><p class="err" id="err"></p></div>
+<div id="app" hidden>
+<div class="top"><h1>Casa Napoli – Admin</h1><button id="snd">🔔 Activer le son</button></div>
+<div class="tabs" id="tabs"></div><div id="list"></div></div></div>
+<script>
+var pw=sessionStorage.getItem('pw')||'',tab='new',data=[],seen=null,snd=false,ac;
+var $=function(i){return document.getElementById(i)};
+var TABS=[['new','À traiter'],['confirmed','Confirmées'],['done','Terminées']];
+function api(m,b){return fetch('/api/orders',{method:m,headers:{'Content-Type':'application/json','x-admin-password':pw},body:b?JSON.stringify(b):undefined})}
+function beep(){try{ac=ac||new(window.AudioContext||window.webkitAudioContext)();[0,.25,.5].forEach(function(d){var o=ac.createOscillator(),g=ac.createGain();o.frequency.value=880;g.gain.value=.2;o.connect(g);g.connect(ac.destination);o.start(ac.currentTime+d);o.stop(ac.currentTime+d+.15)})}catch(e){}}
+function load(){api('GET').then(function(r){
+if(r.status===401){sessionStorage.removeItem('pw');$('login').hidden=false;$('app').hidden=true;$('err').textContent=pw?'Mot de passe incorrect':'';return}
+if(!r.ok)throw 0;sessionStorage.setItem('pw',pw);return r.json()}).then(function(d){
+if(!d)return;$('login').hidden=true;$('app').hidden=false;
+var n=d.filter(function(o){return o.status==='new'}).length;
+if(seen!==null&&n>seen&&snd)beep();seen=n;data=d;render()}).catch(function(){$('err').textContent='Connexion impossible'})}
+function inTab(o,t){return t==='done'?(o.status==='done'||o.status==='cancelled'):o.status===t}
+function setS(id,s){api('PATCH',{id:id,status:s}).then(load)}
+function btn(txt,id,s,p){var b=document.createElement('button');b.textContent=txt;if(p)b.className='p';b.onclick=function(){setS(id,s)};return b}
+function card(o){
+var c=document.createElement('div');c.className='c '+o.status;
+var h=document.createElement('div');h.className='h';
+var b=document.createElement('b');b.textContent=(o.type==='order'?'🛍 Commande · ':'🍽 Réservation · ')+o.nom;h.appendChild(b);
+var w=document.createElement('span');w.textContent=o.date.split('-').reverse().join('/')+' à '+o.heure;h.appendChild(w);c.appendChild(h);
+var a=document.createElement('a');a.href='tel:'+o.tel.replace(/[^\d+]/g,'');a.textContent='📞 '+o.tel;c.appendChild(a);
+var p=document.createElement('pre');p.textContent=o.text+(o.note?'\nRemarque : '+o.note:'');c.appendChild(p);
+if(o.type==='order'){var t=document.createElement('div');t.className='t';t.textContent='Total : '+o.total.toFixed(2).replace('.',',')+' € (à la caisse)';c.appendChild(t)}
+var m=document.createElement('div');m.className='m';m.textContent='Reçu à '+new Date(o.t).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})+(o.status==='cancelled'?' · annulée':'');c.appendChild(m);
+var x=document.createElement('div');x.className='b';
+if(o.status==='new'){x.appendChild(btn('Confirmer',o.id,'confirmed',1));x.appendChild(btn('Annuler',o.id,'cancelled'))}
+else if(o.status==='confirmed'){x.appendChild(btn('Terminé',o.id,'done',1));x.appendChild(btn('Annuler',o.id,'cancelled'))}
+else x.appendChild(btn('Remettre à traiter',o.id,'new'));
+c.appendChild(x);return c}
+function render(){
+var T=$('tabs');T.textContent='';
+TABS.forEach(function(t){var n=data.filter(function(o){return inTab(o,t[0])}).length,b=document.createElement('button');b.textContent=t[1]+' ('+n+')';b.setAttribute('aria-pressed',tab===t[0]);b.onclick=function(){tab=t[0];render()};T.appendChild(b)});
+var L=$('list');L.textContent='';var f=data.filter(function(o){return inTab(o,tab)});
+if(!f.length){var e=document.createElement('p');e.className='m';e.textContent='Rien ici pour le moment.';L.appendChild(e)}
+f.forEach(function(o){L.appendChild(card(o))});
+var n=data.filter(function(o){return o.status==='new'}).length;document.title=(n?'('+n+') ':'')+'Casa Napoli – Admin'}
+$('go').onclick=function(){pw=$('pw').value;load()};
+$('pw').onkeydown=function(e){if(e.key==='Enter'){pw=this.value;load()}};
+$('snd').onclick=function(){snd=!snd;this.textContent=snd?'🔔 Son activé':'🔕 Son coupé';if(snd)beep()};
+if(pw)load();else $('login').hidden=false;
+setInterval(function(){if(!$('app').hidden)load()},15000);
+</script></body></html>
